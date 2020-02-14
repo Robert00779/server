@@ -42,6 +42,7 @@ namespace OC\Files\Storage;
 
 use OC\Files\Filesystem;
 use OC\Files\Storage\Wrapper\Jail;
+use OCP\Constants;
 use OCP\Files\ForbiddenException;
 use OCP\Files\Storage\IStorage;
 use OCP\ILogger;
@@ -107,12 +108,12 @@ class Local extends \OC\Files\Storage\Common {
 				 * @var \SplFileInfo $file
 				 */
 				$file = $it->current();
-				if (in_array($file->getBasename(), array('.', '..'))) {
+				if (in_array($file->getBasename(), ['.', '..'])) {
 					$it->next();
 					continue;
-				} elseif ($file->isDir()) {
+				} else if ($file->isDir()) {
 					rmdir($file->getPathname());
-				} elseif ($file->isFile() || $file->isLink()) {
+				} else if ($file->isFile() || $file->isLink()) {
 					unlink($file->getPathname());
 				}
 				$it->next();
@@ -148,6 +149,54 @@ class Local extends \OC\Files\Storage\Common {
 			$statResult[7] = $filesize;
 		}
 		return $statResult;
+	}
+
+	/**
+	 * @inheritdoc
+	 */
+	public function getMetaData($path) {
+		$fullPath = $this->getSourcePath($path);
+		$stat = stat($fullPath);
+		if (!$stat) {
+			return false;
+		}
+
+		$permissions = Constants::PERMISSION_SHARE;
+		$statPermissions = $stat['mode'];
+		$isDir = ($statPermissions & 0x4000) === 0x4000;
+		if ($statPermissions & 0x0100) {
+			$permissions += Constants::PERMISSION_READ;
+		}
+		if ($statPermissions & 0x0080) {
+			$permissions += Constants::PERMISSION_UPDATE;
+			if ($isDir) {
+				$permissions += Constants::PERMISSION_CREATE;
+			}
+		}
+
+		if (!($path === '' || $path === '/')) { // deletable depends on the parents unix permissions
+			$parent = dirname($fullPath);
+			if (is_writable($parent)) {
+				$permissions += Constants::PERMISSION_DELETE;
+			}
+		}
+
+		$data = [];
+		$data['mimetype'] = $isDir ? 'httpd/unix-directory' : \OC::$server->getMimeTypeDetector()->detectPath($path);
+		$data['mtime'] = $stat['mtime'];
+		if ($data['mtime'] === false) {
+			$data['mtime'] = time();
+		}
+		if ($isDir) {
+			$data['size'] = -1; //unknown
+		} else {
+			$data['size'] = $stat['size'];
+		}
+		$data['etag'] = $this->calculateEtag($path, $stat);
+		$data['storage_mtime'] = $data['mtime'];
+		$data['permissions'] = $permissions;
+
+		return $data;
 	}
 
 	public function filetype($path) {
@@ -340,7 +389,7 @@ class Local extends \OC\Files\Storage\Common {
 	 * @return array
 	 */
 	protected function searchInDir($query, $dir = '') {
-		$files = array();
+		$files = [];
 		$physicalDir = $this->getSourcePath($dir);
 		foreach (scandir($physicalDir) as $item) {
 			if (\OC\Files\Filesystem::isIgnoredDir($item))
@@ -423,9 +472,13 @@ class Local extends \OC\Files\Storage\Common {
 	 * @return string
 	 */
 	public function getETag($path) {
-		if ($this->is_file($path)) {
-			$stat = $this->stat($path);
+		return $this->calculateEtag($path, $this->stat($path));
+	}
 
+	private function calculateEtag(string $path, array $stat): string {
+		if ($stat['mode'] & 0x4000) { // is_dir
+			return parent::getETag($path);
+		} else {
 			if ($stat === false) {
 				return md5('');
 			}
@@ -445,8 +498,6 @@ class Local extends \OC\Files\Storage\Common {
 			}
 
 			return md5($toHash);
-		} else {
-			return parent::getETag($path);
 		}
 	}
 
