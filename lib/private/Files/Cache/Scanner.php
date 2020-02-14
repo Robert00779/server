@@ -219,6 +219,7 @@ class Scanner extends BasicEmitter implements IScanner {
 					if (!empty($newData)) {
 						// Reset the checksum if the data has changed
 						$newData['checksum'] = '';
+						$newData['parent'] = $parentId;
 						$data['fileid'] = $this->addToCache($file, $newData, $fileId);
 					}
 					if (isset($cacheData['size'])) {
