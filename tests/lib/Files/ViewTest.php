@@ -15,6 +15,7 @@ use OC\Files\Storage\Common;
 use OC\Files\Storage\Temporary;
 use OC\Files\Stream\Quota;
 use OC\Files\View;
+use OCP\Constants;
 use OCP\Files\Config\IMountProvider;
 use OCP\Files\FileInfo;
 use OCP\Files\Storage\IStorage;
@@ -1611,7 +1612,7 @@ class ViewTest extends \Test\TestCase {
 	public function testMountPointMove() {
 		self::loginAsUser($this->user);
 
-		list($mount1, $mount2) = $this->createTestMovableMountPoints([
+		[$mount1, $mount2] = $this->createTestMovableMountPoints([
 			$this->user . '/files/mount1',
 			$this->user . '/files/mount2',
 		]);
@@ -1636,7 +1637,7 @@ class ViewTest extends \Test\TestCase {
 	public function testMoveMountPointIntoAnother() {
 		self::loginAsUser($this->user);
 
-		list($mount1, $mount2) = $this->createTestMovableMountPoints([
+		[$mount1, $mount2] = $this->createTestMovableMountPoints([
 			$this->user . '/files/mount1',
 			$this->user . '/files/mount2',
 		]);
@@ -1659,7 +1660,7 @@ class ViewTest extends \Test\TestCase {
 	public function testMoveMountPointIntoSharedFolder() {
 		self::loginAsUser($this->user);
 
-		list($mount1) = $this->createTestMovableMountPoints([
+		[$mount1] = $this->createTestMovableMountPoints([
 			$this->user . '/files/mount1',
 		]);
 
@@ -2097,12 +2098,18 @@ class ViewTest extends \Test\TestCase {
 
 		/** @var Temporary|\PHPUnit_Framework_MockObject_MockObject $storage */
 		$storage = $this->getMockBuilder(Temporary::class)
-			->setMethods([$operation, 'filemtime'])
+			->setMethods([$operation, 'getMetaData'])
 			->getMock();
 
 		$storage->expects($this->any())
-			->method('filemtime')
-			->will($this->returnValue(123456789));
+			->method('getMetaData')
+			->will($this->returnValue([
+				'mtime' => 1885434487,
+				'etag' => '',
+				'mimetype' => 'text/plain',
+				'permissions' => Constants::PERMISSION_ALL,
+				'size' => 3
+			]));
 
 		$sourcePath = 'original.txt';
 		$targetPath = 'target.txt';
@@ -2114,6 +2121,7 @@ class ViewTest extends \Test\TestCase {
 		$storage->expects($this->once())
 			->method($operation)
 			->will($this->returnCallback(
+
 				function () use ($view, $sourcePath, $targetPath, &$lockTypeSourceDuring, &$lockTypeTargetDuring) {
 					$lockTypeSourceDuring = $this->getFileLockType($view, $sourcePath);
 					$lockTypeTargetDuring = $this->getFileLockType($view, $targetPath);
@@ -2277,12 +2285,18 @@ class ViewTest extends \Test\TestCase {
 			->getMock();
 		/** @var Temporary|\PHPUnit_Framework_MockObject_MockObject $storage2 */
 		$storage2 = $this->getMockBuilder(Temporary::class)
-			->setMethods([$storageOperation, 'filemtime'])
+			->setMethods([$storageOperation, 'getMetaData'])
 			->getMock();
 
 		$storage2->expects($this->any())
-			->method('filemtime')
-			->will($this->returnValue(123456789));
+			->method('getMetaData')
+			->will($this->returnValue([
+				'mtime' => 1885434487,
+				'etag' => '',
+				'mimetype' => 'text/plain',
+				'permissions' => Constants::PERMISSION_ALL,
+				'size' => 3
+			]));
 
 		$sourcePath = 'original.txt';
 		$targetPath = 'substorage/target.txt';
@@ -2331,7 +2345,7 @@ class ViewTest extends \Test\TestCase {
 	public function testLockMoveMountPoint() {
 		self::loginAsUser('test');
 
-		list($mount) = $this->createTestMovableMountPoints([
+		[$mount] = $this->createTestMovableMountPoints([
 			$this->user . '/files/substorage',
 		]);
 
@@ -2553,6 +2567,7 @@ class ViewTest extends \Test\TestCase {
 		$fh = tmpfile();
 		fwrite($fh, 'fooo');
 		rewind($fh);
+		clearstatcache();
 		$view->file_put_contents('', $fh);
 		$this->assertEquals('fooo', $view->file_get_contents(''));
 		$data = $view->getFileInfo('.');
